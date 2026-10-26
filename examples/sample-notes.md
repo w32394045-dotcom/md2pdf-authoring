@@ -1,0 +1,42 @@
+# Chapter 3 — Forces (self-test, 10 items)
+
+Suggested time: 60 minutes. No calculator for items 1–6.
+
+## Part 1 — Basics
+
+| Item | Topic | Points |
+|:-----|:------|-------:|
+| 1 | Weight and normal force | 4 |
+| 2 | Direction of friction | 4 |
+
+1. A particle of mass $m$ moves under $\vec{F} = m\vec{a}$. Find the acceleration.
+2. A block rests on an incline of angle $\theta$. Write the component of gravity along the plane.
+
+## Part 2 — Applied
+
+3. Two blocks connected by a light string over a frictionless pulley: $m_1 = 2\,\mathrm{kg}$, $m_2 = 3\,\mathrm{kg}$.
+   Neglect friction and find the tension to one decimal place.
+
+## Chemistry cross-check
+
+4. Hydrogen burns as follows — balance it and compute the moles of water from $4\ \mathrm{mol}$ of $\ce{H2}$:
+
+$$\ce{2H2 + O2 -> 2H2O}$$
+
+5. For the reversible reaction below, state the effect of raising the pressure:
+
+$$\ce{N2(g) + 3H2(g) <=> 2NH3(g)}$$
+
+## Answers
+
+> Answers and full solutions belong in the answer module, not here.
+
+<div class="page-break"></div>
+
+## Notes
+
+- Use `\ce{}` for chemistry and `\pu{}` for units, e.g. $\pu{9.8 m/s^2}$.
+- Keep tables to 6 columns or fewer.
+- One footnote for the record[^1].
+
+[^1]: Footnote text goes at the end of the document.

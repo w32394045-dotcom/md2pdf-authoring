@@ -1,205 +1,207 @@
-# md2pdf-authoring — 教 AI 用对 md2pdf、写对 Markdown 的通用 Skill
+# md2pdf-authoring — teach an AI to use md2pdf and to write Markdown that survives rendering
 
-一个 **Skill**（给 AI agent 读的说明书 + 自检脚本），解决两件事：
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Skill](https://img.shields.io/badge/type-agent%20skill-9cf)](SKILL.md)
 
-1. **AI 知道怎么正确使用 [md2pdf](https://github.com/w32394045-dotcom/md2pdf)**——
-   打开、载入、设置、打印另存为 PDF、导出独立 HTML，哪一步不能跳。
-2. **AI 知道怎么写出「渲染正确、打印不出血」的 Markdown**——
-   公式用 LaTeX（化学式 `\ce`、单位 `\pu`）、图形用渲染型围栏（`svg`/`css`/`html`）、
-   表格不撑出纸外、分页不乱、交付前跑自检。
+**English** · [简体中文](README.zh-CN.md)
 
-> 没有这个 Skill，模型也能写 Markdown，但最常见的翻车是：
-> 公式写成 `x²`/`√`、化学式写成裸 `H2SO4`、表格 9 列挤成一团、
-> 想画图却得到一段代码、把 `.md` 套进代码围栏导致表格全不渲染。
+A **Skill** — instructions for an AI agent, plus a linter — that solves two things:
 
-**不知道怎么装？** 下面「安装 → 方式一」有一段现成的提示词，**整段复制给你的 AI agent**
-（Claude Code / Codex / DSH / Cursor 都行），它自己下载、放到正确位置、装完还会自验。
+1. **The agent knows how to drive [md2pdf](https://github.com/w32394045-dotcom/md2pdf)** —
+   open, load, set up, print to PDF, export a standalone HTML; which step cannot be skipped.
+2. **The agent knows how to write Markdown that renders and prints correctly** —
+   maths in LaTeX (chemistry via `\ce`, units via `\pu`), figures in render fences (`svg` / `css` / `html`),
+   tables that don't blow out the page, page breaks that behave, and a linter run before delivery.
 
-## 目录结构
+> Without this, models still write Markdown — they just get the usual things wrong:
+> `x²`/`√` instead of LaTeX, bare `H2SO4`, a nine-column table squeezed onto A4,
+> asking for a picture and getting a code block, or wrapping the whole `.md` in a fence so nothing renders.
 
-```text
-SKILL.md                              主文件：流程、硬规范、故障对照表、自检清单
-references/markdown-cheatsheet.md     这个工具到底认哪些 Markdown 写法（附不支持清单）
-references/math-and-chem.md           LaTeX 规范 + \ce/\pu 用法与边界 + 常见错法
-references/layout-and-print.md        A4 版式、SVG 画图规范、分页、打印排错
-scripts/check_md.py                   交付前自检脚本（纯标准库，无依赖）
-examples/示例-讲义.md                 一份能通过检查的正例
-examples/反例-会被检查脚本逮住.md       一份故意写坏的反例（看脚本能查出什么）
-```
+**Can't be bothered to install it?** Section "Install → Option 1" below has a prompt you can paste straight
+into your agent (Claude Code / Codex / DSH / Cursor). It downloads, installs, and verifies itself.
 
-## 安装
-
-先说清楚：**这个仓库是「Skill」**——给 AI 读的说明书（`SKILL.md`）+ 参考资料 + 一个自检脚本，
-不是双击就用的软件。真正干活的是配套工具 [md2pdf](https://github.com/w32394045-dotcom/md2pdf)（一个 HTML 文件）。
-
-装它 = 让 AI 知道这些规范。三条路，按你手上有什么挑一条。
-
-### 方式一：把下面这段直接发给你的 AI agent（推荐，最省事）
-
-支持 Skill 的客户端都行：Claude Code、Codex、DeepSeek Harness、Cursor、Gemini CLI……
-**把下面整段复制过去**，它会自己下载、放对位置、装完还会自验并告诉你结果。
+## What's inside
 
 ```text
-请帮我安装一个 Skill：md2pdf-authoring。
-
-来源仓库：https://github.com/w32394045-dotcom/md2pdf-authoring
-它是什么：一份给 AI 读的说明书（SKILL.md）+ 参考资料（references/ 三个 md）+
-自检脚本（scripts/check_md.py）。作用是教 AI 正确使用 md2pdf（Markdown→PDF 工具），
-并写出「公式、化学式、图表都渲染正确、打印不出血」的 Markdown。
-
-请按顺序执行：
-
-1. 把仓库下载到本机，目录名保持 md2pdf-authoring，且目录里必须有 SKILL.md。
-   参考命令：git clone --depth 1 https://github.com/w32394045-dotcom/md2pdf-authoring.git
-   （没有 git 就下载 zip 解压，同样保留目录名）
-
-2. 把这个目录整体放进我的 Skill 根目录，按你所在客户端挑一个：
-   - DeepSeek Harness / 通用：~/.dsh/skills/md2pdf-authoring/
-   - Claude Code 风格：~/.claude/skills/md2pdf-authoring/
-   - 只给当前项目用：<项目根>/.dsh/skills/md2pdf-authoring/
-   如果你有 skill_install / skill 安装工具，优先用它，但要注意：
-   必须连 references/ 和 scripts/ 一起复制，不要只装 SKILL.md。
-   也不要把它压成一个平铺的 md 文件（那样 references/ 和 scripts/ 会丢，脚本路径就废了）。
-
-3. 装完做三项验证，并把结果告诉我：
-   a) 你的 Skill 列表里能看到 md2pdf-authoring，状态正常；
-   b) 目录里有 SKILL.md、references/（3 个 md）、scripts/check_md.py；
-   c) 运行 python scripts/check_md.py examples/示例-讲义.md，能打印检查结果
-      （预期 0 error 并退出码 0）。
-
-4. 如果任何一步失败，告诉我卡在哪：路径不存在、没权限、客户端不支持 Skill、
-   或者只能装单文件——并给出退路（至少让我能把 SKILL.md 当系统提示词用）。
-
-约束：不要修改 SKILL.md 的内容；不要改脚本逻辑；不要把这个仓库的文件混进我别的 Skill 目录。
+SKILL.md                              main instructions: workflow, hard rules, troubleshooting, checklist
+references/markdown-cheatsheet.md     what this tool's Markdown subset actually supports (and what it doesn't)
+references/math-and-chem.md           LaTeX conventions + \ce/\pu usage, limits, common mistakes
+references/layout-and-print.md        A4 layout, SVG drawing rules, page breaks, print troubleshooting
+scripts/check_md.py                   pre-delivery linter (stdlib only, no dependencies)
+examples/sample-notes.md              a Chinese positive example that passes the linter
+examples/bad-example-caught.md        a deliberately broken file, to show what the linter catches
 ```
 
-### 方式二：手动装（一条命令）
+> The `examples/` files are in Chinese on purpose (they double as a fixture for the Chinese README);
+> the linter's rules are language-agnostic.
 
-把整个目录放进 Skill 根目录，**目录名保持 `md2pdf-authoring`**：
+## Install
+
+First, a clarification: **this repo is a Skill** — instructions for an AI, plus a checker script.
+The thing that does the work is [md2pdf](https://github.com/w32394045-dotcom/md2pdf) (one HTML file).
+Installing the skill just tells the AI about the rules. Three routes; pick whatever fits.
+
+### Option 1 — paste this into your AI agent (easiest)
+
+Works with any agent that supports skills: Claude Code, Codex, DeepSeek Harness, Cursor, Gemini CLI…
+**Copy the whole block below.** It downloads the repo, puts it in the right place, and verifies the result.
+
+```text
+Please install a skill for me: md2pdf-authoring.
+
+Source repository: https://github.com/w32394045-dotcom/md2pdf-authoring
+What it is: an instruction file for AI agents (SKILL.md) + references (three markdown files in references/)
++ a linter (scripts/check_md.py). It teaches an AI to use md2pdf (a Markdown→PDF tool) correctly and to
+produce Markdown whose maths, chemistry, figures and tables render and print correctly.
+
+Please do the following, in order:
+
+1. Download the repository to this machine, keeping the directory name md2pdf-authoring, and make sure
+   SKILL.md exists inside it.
+   Suggested command: git clone --depth 1 https://github.com/w32394045-dotcom/md2pdf-authoring.git
+   (If git is unavailable, download the zip and extract it — keep the directory name.)
+
+2. Move that whole directory into my skills root, choosing the one that matches your client:
+   - DeepSeek Harness / generic: ~/.dsh/skills/md2pdf-authoring/
+   - Claude Code style: ~/.claude/skills/md2pdf-authoring/
+   - This project only: <project root>/.dsh/skills/md2pdf-authoring/
+   If you have a skill_install / skill tool, prefer it — but copy references/ and scripts/ along with
+   SKILL.md. Do not install it as a single flat markdown file: references/ and scripts/ would be lost and
+   the paths inside SKILL.md would break.
+
+3. After installing, verify three things and report the results to me:
+   a) md2pdf-authoring shows up in your skill list and is valid;
+   b) the directory contains SKILL.md, references/ (three .md files) and scripts/check_md.py;
+   c) running `python scripts/check_md.py examples/sample-notes.md` prints a report (expect 0 errors, exit 0).
+
+4. If any step fails, tell me exactly where: path missing, permission denied, client doesn't support skills,
+   or only single-file install works — and give me the fallback (at minimum, let me paste SKILL.md as a
+   system prompt).
+
+Constraints: do not edit SKILL.md; do not change the script's logic; do not mix these files into my other
+skill directories.
+```
+
+### Option 2 — do it manually (one command)
 
 ```bash
 git clone --depth 1 https://github.com/w32394045-dotcom/md2pdf-authoring.git
-cp -r md2pdf-authoring ~/.dsh/skills/        # DeepSeek Harness（用户级）
-cp -r md2pdf-authoring ~/.claude/skills/     # Claude Code 风格
-cp -r md2pdf-authoring ./.dsh/skills/        # 只给当前仓库用
+cp -r md2pdf-authoring ~/.dsh/skills/        # DeepSeek Harness (user scope)
+cp -r md2pdf-authoring ~/.claude/skills/     # Claude Code style
+cp -r md2pdf-authoring ./.dsh/skills/        # this project only
 ```
 
-用 DSH 的安装工具则：
+With a skill installer tool:
 
 ```text
-skill_install source=<本仓库路径>/md2pdf-authoring scope=user
+skill_install source=<path to this repo>/md2pdf-authoring scope=user
 ```
 
-> ⚠️ 两个坑：**别只复制 SKILL.md**（`references/`、`scripts/` 一丢，说明书里的路径全失效）；
-> **别装成平铺单文件**（会变成 `skills/md2pdf-authoring.md`，资源同样丢失）。
-> 这两个坑我都踩过——现在目录里 `SKILL.md` 是 bundle 形态，装完确认有 5 个文件。
+> ⚠️ Two traps: **don't copy only SKILL.md** (lose `references/` and `scripts/`, and every path inside breaks),
+> and **don't install it as a flat file** (it becomes `skills/md2pdf-authoring.md` with the same loss).
+> Both traps are real — I hit them. After installing, check that there are 5 files.
 
-### 方式三：AI 软件没有 Skill 机制（网页版 ChatGPT / 豆包 / Kimi / 通义 等）
+### Option 3 — your AI has no skill mechanism (web ChatGPT / Kimi / Doubao / Tongyi …)
 
-没有 `skills` 目录、也不支持安装 Skill 的客户端，**根本不用装**——把内容直接给它就行。
-三种给法，从省事到最省事：
+No `skills` directory, no install support — then don't install anything, just hand the content over.
+Three ways, easiest first:
 
-**3.1 直接发文件（最省事）**
+**3.1 Send the file**
 
-把 `SKILL.md`（或整份 zip）**作为附件上传 / 拖进对话框**，然后说一句：
+Attach or drop `SKILL.md` (or the whole zip) into the chat, then say:
 
 ```text
-这是一个给 AI 用的写作规范（Skill）。请读里面的 SKILL.md，
-接下来帮我写/改 Markdown 文档时严格按它的规范来（公式用 LaTeX、化学式用 \ce、
-图形用 svg/css/html 渲染型围栏、表格列数≤6、交付前按它的清单自检）。
-如果你还能读 references/ 里的文件，需要时自己去看。
+This is a writing spec for AI (a Skill). Read the SKILL.md inside.
+From now on, when you help me write or edit Markdown, follow it strictly:
+maths in LaTeX, chemistry via \ce, figures via svg/css/html render fences, tables with at most 6 columns,
+and run its checklist before you hand anything back.
+If you can also read the files in references/, consult them when needed.
 ```
 
-- 大多数网页版都支持拖文件、粘贴文件、或点回形针上传。
-- 能一次发整个仓库（zip / 拖文件夹）更好——`references/` 和 `scripts/` 都在里面，AI 需要时自己去读。
-- 注意：**文件会被当成"参考资料"而不是"规则"**，所以要在那句话里明确「按它来写」，
-  光上传不说，AI 不一定会遵守。
+- Most web assistants accept drag-and-drop, paste-as-file, or a paperclip upload.
+- Sending the whole repo (zip / folder) is better: `references/` and `scripts/` come along.
+- Caveat: **an uploaded file is treated as reference material, not as rules** — you must say "follow it",
+  otherwise the model may ignore it.
 
-**3.2 直接贴内容（最通用，什么软件都行）**
+**3.2 Paste the content**
 
-打开仓库里的 [`SKILL.md`](SKILL.md)，把**全文复制**进对话框发出去
-（包括开头 `---` 之间的 name / description）。习惯的话就存到软件的
-「**系统提示词 / 自定义指令 / 项目知识库 / Agent 配置**」里，之后新建会话自动带上。
+Open [`SKILL.md`](SKILL.md), copy the whole text into the chat (including the `---` frontmatter), or store it
+under *system prompt / custom instructions / project knowledge* so new chats pick it up automatically.
+When you need maths, chemistry, figures or troubleshooting, paste the matching reference file too:
 
-需要公式、化学式、画图或排错时，再把 `references/` 里对应的那一个 md 也贴进来：
-
-| 贴哪个 | 管什么 |
+| File | Covers |
 |---|---|
-| `references/math-and-chem.md` | 公式、`\ce` 化学式、`\pu` 单位、常见错法 |
-| `references/layout-and-print.md` | A4 版式、SVG 画图、分页、打印排错 |
-| `references/markdown-cheatsheet.md` | 这个工具支持/不支持哪些 Markdown 写法 |
+| `references/math-and-chem.md` | formulas, `\ce`, `\pu`, common mistakes |
+| `references/layout-and-print.md` | A4 layout, SVG drawing, page breaks, print fixes |
+| `references/markdown-cheatsheet.md` | what this tool supports / does not support |
 
-**3.3 只贴一句话版**
+**3.3 One-line version**
 
-懒得贴全文时，发这一句也能拿到大部分效果：
+If you don't want to paste 12 KB, this sentence already gets most of the benefit:
 
 ```text
-以后帮我写 Markdown（要转 PDF/打印的）时按这些规矩来：
-公式一律 LaTeX（$…$ / $$…$$），化学式用 \ce{H2SO4} 这种写法，禁止用 x² √ ≤ → 这类 Unicode 近似；
-画图用 ```svg / ```css / ```html 围栏（SVG 要带 viewBox、文字给 font-size、白底配色）；
-表格列数 ≤ 6 且每行列数一致；需要分页用 <div class="page-break"></div>；
-代码围栏必须标语言；不要写 \usepackage / \begin{document} / \label 这类 LaTeX 文档级命令；
-写完先自检一遍再给我。
+Whenever you write Markdown meant for PDF or print: use LaTeX for all maths ($…$ / $$…$$),
+write chemistry as \ce{H2SO4}, never use Unicode approximations like x² √ ≤ →, draw figures with
+```svg / ```css / ```html fences (SVG needs viewBox, explicit font-size, colours for white paper),
+keep tables to 6 columns or fewer with a consistent column count, use <div class="page-break"></div>
+for page breaks, always tag code fences with a language, and never use \usepackage / \begin{document} /
+\label. Self-check before handing it over.
 ```
 
-这样能得到**八成到九成的效果**，代价有两个：
+Expect **80–90% of the benefit**. The cost: it does not trigger automatically (remind it, or say "follow the
+md2pdf rules"), it eats context (SKILL.md ≈ 12 KB, all three references ≈ 26 KB), and long attachments may be
+truncated or only indexed — if the model ignores the spec, paste the key paragraphs again.
 
-- 它不会**自动触发**——每次要说明「按 md2pdf 规范来写」，或在会话开头提醒一次；
-- 上下文占用变长（SKILL.md 约 12KB，三份 reference 全贴约 26KB）。
-- 附件方式还有个坑：**长文件可能被截断**，或用「文件检索」只索引摘要；感觉它没按规范来，
-  就把关键段落单独再贴一遍。
-
-### 装完怎么验证真的生效
+### Verify it actually works
 
 ```bash
-# 1. 文件都在
+# 1. files are there
 ls ~/.dsh/skills/md2pdf-authoring/
-#    期望看到 SKILL.md  references/  scripts/
+#    expect: SKILL.md  references/  scripts/
 
-# 2. 脚本能跑
+# 2. the linter runs
 python ~/.dsh/skills/md2pdf-authoring/scripts/check_md.py \
-       ~/.dsh/skills/md2pdf-authoring/examples/示例-讲义.md
-#    期望：汇总 0 error, 0 warn, 0 hint / [OK] 通过
+       ~/.dsh/skills/md2pdf-authoring/examples/sample-notes.md
+#    expect: 0 errors, 0 warnings, 0 hints / [OK]
 
-# 3. 问 AI 一句测试题（能答对说明规范已加载）
-#    「写一个含二元一次方程组和化学方程式的 Markdown 小片段，按 md2pdf 规范来」
-#    正确表现：公式用 $…$、化学式用 \ce{}、不用 x² / √ / ≤ 这类 Unicode 近似
+# 3. ask the AI a test question — correct answers show the spec loaded:
+#    "Write a short Markdown snippet with a quadratic equation and a chemical equation, md2pdf-style"
+#    good sign: $…$ maths, \ce{} chemistry, no x² / √ / ≤
 ```
 
-### 更新与卸载
+### Update / uninstall
 
 ```bash
-cd md2pdf-authoring && git pull          # 更新
-rm -rf ~/.dsh/skills/md2pdf-authoring    # 卸载（就是删目录）
+cd md2pdf-authoring && git pull          # update
+rm -rf ~/.dsh/skills/md2pdf-authoring    # uninstall (just delete the directory)
 ```
 
-
-## 自检脚本
+## The linter
 
 ```bash
-python scripts/check_md.py 你的文档.md          # 查一份
-python scripts/check_md.py --strict 文档.md     # 把 hint 也算失败（接流水线用）
+python scripts/check_md.py your-doc.md          # one file
+python scripts/check_md.py --strict your-doc.md # hints count as failures (CI-friendly)
 ```
 
-查什么：
+What it checks:
 
-- 代码围栏是否闭合、是否漏标语言（漏标 → 不高亮，也没法触发渲染）
-- `$$` / `\(` / `\[` 是否成对
-- 表格每行列数是否与表头一致（缺格会让整表错位）
-- 是否写了会被**安全过滤**的东西：`<script>`、`onclick=`、`@import`、外链 `url()`
-- 是否用了 Unicode 近似数学符号（`x²`、`√2`、`≤`）——这些在公式里会散架
-- `\ce{` / `\pu{` 花括号是否闭合
-- 是否写了文档级 LaTeX（`\usepackage`、`\begin{document}`、`\label`/`\ref`）——不支持
-- 表格是否超过 6 列、代码行是否超过 100 字符、标题是否跳级
+- fences closed, and every fence tagged with a language (untagged → no highlighting, no rendering)
+- `$$` / `\(` / `\[` balance
+- table rows whose column count differs from the header (a missing cell shifts the whole table)
+- things that get **sanitised away**: `<script>`, `onclick=`, `@import`, external `url()`
+- Unicode maths approximations (`x²`, `√2`, `≤`) — they fall apart inside formulas
+- unbalanced `\ce{` / `\pu{` braces
+- document-level LaTeX that is not supported (`\usepackage`, `\begin{document}`, `\label`/`\ref`)
+- tables wider than 6 columns, code lines over 100 characters, skipped heading levels
 
-**讲过不误报**：围栏里的代码和行内代码会被屏蔽，所以「文档里教别人怎么写 `\ce{`
-或者说明 `\usepackage` 不支持」不会把自己判成错误（这个误报我踩过，已经修了）。
+It does **not** fire on documentation: code fences and inline code are masked before checking, so a file that
+*explains* `\ce{` or `\usepackage` is not flagged (that false positive existed once; it is fixed).
 
-跑 `examples/反例-会被检查脚本逮住.md` 的真实输出：
+Real output for `examples/bad-example-caught.md`:
 
 ```text
 ==============================================================
-文档：examples/反例-会被检查脚本逮住.md
+文档：examples/bad-example-caught.md
         [error] $$ 数量是奇数（1），有一个块级公式没闭合
   L7    [error] 表格这一行有 2 列，表头是 3 列（缺格会让整表错位）
   L8    [error] 表格这一行有 4 列，表头是 3 列（缺格会让整表错位）
@@ -215,26 +217,29 @@ python scripts/check_md.py --strict 文档.md     # 把 hint 也算失败（接�
 [FAIL] 有 6 处 error，先修完再交付。
 ```
 
-## 适用 / 不适用
+(The report text is in Chinese; `--strict` only changes the exit code.)
 
-| 适用 | 不适用 |
+## Good fit / not a fit
+
+| Good fit | Not a fit |
 |---|---|
-| 把 Markdown 变 PDF / 打印稿 | 需要 `.docx` / `.pptx` / 可编辑 Excel |
-| 出讲义、题包、技术文档、报告 | 多人协同编辑 |
-| 需要公式、化学式、矢量图 | 需要联网渲染（MathJax CDN 之类） |
-| 导出单文件 HTML 分享 | 需要 LaTeX 完整编译（宏包、交叉引用） |
+| Markdown → PDF / print output | `.docx` / `.pptx` / editable Excel |
+| Handouts, problem sets, technical notes, reports | Multi-user collaborative editing |
+| Documents with maths, chemistry, vector figures | Anything needing CDN rendering (MathJax etc.) |
+| Sharing a single self-contained HTML file | Full LaTeX compilation (packages, cross-references) |
 
-## 配套工具
+## Companion tool
 
-本 Skill 假定你手上有 **md2pdf**（离线单文件 Markdown → PDF，含内联 Temml 公式引擎）：
+This Skill assumes you have **md2pdf** (offline single-file Markdown → PDF, with an inlined Temml engine):
 
-- 仓库：https://github.com/w32394045-dotcom/md2pdf
-- 主站：https://md2pdf.xszx.cc.cd
+- repo: https://github.com/w32394045-dotcom/md2pdf
+- primary site: https://md2pdf.xszx.cc.cd
 
-工具本身是单文件，不需要安装；这个 Skill 只是让 AI 别把它用错、别把 Markdown 写坏。
+The tool itself is one file and needs no install; the Skill just stops the AI from using it wrongly and from
+writing Markdown that breaks.
 
-## 许可证
+## Licence
 
 [MIT](LICENSE) © 2026 w32394045-dotcom
 
-随便用、随便改、随便分发，保留版权声明即可，不提供担保。
+Use it, change it, redistribute it — keep the copyright notice. No warranty.
