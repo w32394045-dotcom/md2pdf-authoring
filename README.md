@@ -26,22 +26,109 @@ examples/反例-会被检查脚本逮住.md       一份故意写坏的反例（
 
 ## 安装
 
-把整个目录放进你的 Skill 根目录即可（目录名保持 `md2pdf-authoring`）：
+先说清楚：**这个仓库是「Skill」**——给 AI 读的说明书（`SKILL.md`）+ 参考资料 + 一个自检脚本，
+不是双击就用的软件。真正干活的是配套工具 [md2pdf](https://github.com/w32394045-dotcom/md2pdf)（一个 HTML 文件）。
+
+装它 = 让 AI 知道这些规范。三条路，按你手上有什么挑一条。
+
+### 方式一：把下面这段直接发给你的 AI agent（推荐，最省事）
+
+支持 Skill 的客户端都行：Claude Code、Codex、DeepSeek Harness、Cursor、Gemini CLI……
+**把下面整段复制过去**，它会自己下载、放对位置、装完还会自验并告诉你结果。
+
+```text
+请帮我安装一个 Skill：md2pdf-authoring。
+
+来源仓库：https://github.com/w32394045-dotcom/md2pdf-authoring
+它是什么：一份给 AI 读的说明书（SKILL.md）+ 参考资料（references/ 三个 md）+
+自检脚本（scripts/check_md.py）。作用是教 AI 正确使用 md2pdf（Markdown→PDF 工具），
+并写出「公式、化学式、图表都渲染正确、打印不出血」的 Markdown。
+
+请按顺序执行：
+
+1. 把仓库下载到本机，目录名保持 md2pdf-authoring，且目录里必须有 SKILL.md。
+   参考命令：git clone --depth 1 https://github.com/w32394045-dotcom/md2pdf-authoring.git
+   （没有 git 就下载 zip 解压，同样保留目录名）
+
+2. 把这个目录整体放进我的 Skill 根目录，按你所在客户端挑一个：
+   - DeepSeek Harness / 通用：~/.dsh/skills/md2pdf-authoring/
+   - Claude Code 风格：~/.claude/skills/md2pdf-authoring/
+   - 只给当前项目用：<项目根>/.dsh/skills/md2pdf-authoring/
+   如果你有 skill_install / skill 安装工具，优先用它，但要注意：
+   必须连 references/ 和 scripts/ 一起复制，不要只装 SKILL.md。
+   也不要把它压成一个平铺的 md 文件（那样 references/ 和 scripts/ 会丢，脚本路径就废了）。
+
+3. 装完做三项验证，并把结果告诉我：
+   a) 你的 Skill 列表里能看到 md2pdf-authoring，状态正常；
+   b) 目录里有 SKILL.md、references/（3 个 md）、scripts/check_md.py；
+   c) 运行 python scripts/check_md.py examples/示例-讲义.md，能打印检查结果
+      （预期 0 error 并退出码 0）。
+
+4. 如果任何一步失败，告诉我卡在哪：路径不存在、没权限、客户端不支持 Skill、
+   或者只能装单文件——并给出退路（至少让我能把 SKILL.md 当系统提示词用）。
+
+约束：不要修改 SKILL.md 的内容；不要改脚本逻辑；不要把这个仓库的文件混进我别的 Skill 目录。
+```
+
+### 方式二：手动装（一条命令）
+
+把整个目录放进 Skill 根目录，**目录名保持 `md2pdf-authoring`**：
 
 ```bash
-# 常见位置（按你的 agent 客户端选一个）
-cp -r md2pdf-authoring ~/.dsh/skills/            # DeepSeek Harness（用户级）
-cp -r md2pdf-authoring ./.dsh/skills/            # 只给当前仓库用
-cp -r md2pdf-authoring ~/.claude/skills/         # Claude Code 风格目录
+git clone --depth 1 https://github.com/w32394045-dotcom/md2pdf-authoring.git
+cp -r md2pdf-authoring ~/.dsh/skills/        # DeepSeek Harness（用户级）
+cp -r md2pdf-authoring ~/.claude/skills/     # Claude Code 风格
+cp -r md2pdf-authoring ./.dsh/skills/        # 只给当前仓库用
 ```
 
-或者用 DSH 的安装命令：
+用 DSH 的安装工具则：
 
 ```
-skill_install source=<本仓库路径>/md2pdf-authoring
+skill_install source=<本仓库路径>/md2pdf-authoring scope=user
 ```
 
-不需要安装也能用：直接把 `SKILL.md` 的内容贴进对话，它本身就是完整说明书。
+> ⚠️ 两个坑：**别只复制 SKILL.md**（`references/`、`scripts/` 一丢，说明书里的路径全失效）；
+> **别装成平铺单文件**（会变成 `skills/md2pdf-authoring.md`，资源同样丢失）。
+
+### 方式三：AI 软件没有 Skill 机制（网页版 ChatGPT / 豆包 / Kimi 等）
+
+没有 `skills` 目录、也不支持安装 Skill 的客户端，就用**文件版**：
+
+1. 打开仓库里的 [`SKILL.md`](SKILL.md)，把**全文**复制走（包括开头 `---` 之间的 name / description）。
+2. 粘贴到软件的「**系统提示词 / 自定义指令 / 项目知识库 / Agent 配置**」里，保存。
+3. 需要公式、化学式、画图或排错时，再把 `references/` 里对应的那一个 md 一起贴进去
+   （`math-and-chem.md` 管公式化学式，`layout-and-print.md` 管版式画图，`markdown-cheatsheet.md` 管语法）。
+4. 装了 Python 的话，`scripts/check_md.py` 可以本地跑，把输出贴给 AI 让它改。
+
+这样能得到**八成到九成的效果**，代价有两个：
+
+- 它不会**自动触发**——每次要说明「按 md2pdf 规范来写」，或在会话开头提醒一次；
+- 上下文占用变长（SKILL.md 约 11KB，三份 reference 全贴约 25KB）。
+
+### 装完怎么验证真的生效
+
+```bash
+# 1. 文件都在
+ls ~/.dsh/skills/md2pdf-authoring/
+#    期望看到 SKILL.md  references/  scripts/
+
+# 2. 脚本能跑
+python ~/.dsh/skills/md2pdf-authoring/scripts/check_md.py \
+       ~/.dsh/skills/md2pdf-authoring/examples/示例-讲义.md
+#    期望：汇总 0 error, 0 warn, 0 hint / [OK] 通过
+
+# 3. 问 AI 一句测试题（能答对说明规范已加载）
+#    「写一个含二元一次方程组和化学方程式的 Markdown 小片段，按 md2pdf 规范来」
+#    正确表现：公式用 $…$、化学式用 \ce{}、不用 x² / √ / ≤ 这类 Unicode 近似
+```
+
+### 更新与卸载
+
+```bash
+cd md2pdf-authoring && git pull          # 更新
+rm -rf ~/.dsh/skills/md2pdf-authoring    # 卸载（就是删目录）
+```
+
 
 ## 自检脚本
 
