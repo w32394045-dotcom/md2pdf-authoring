@@ -73,6 +73,24 @@ def read_text(path):
     return raw.decode('utf-8', 'replace')
 
 
+def mask_inline_code(line):
+    """把行内代码的内容换成等长的占位符。
+
+    为什么需要：文档里「讲」某个语法（比如说明 `\\usepackage` 不支持、
+    `\\ce{` 要怎么写）不等于真的在用。之前没做这层屏蔽，README 讲 LaTeX 规范
+    就被自己的脚本判成 6 处 error —— 典型的假阳性。
+    """
+    out = []
+    in_code = False
+    for ch in line:
+        if ch == '`':
+            in_code = not in_code
+            out.append(ch)
+            continue
+        out.append('x' if in_code else ch)
+    return ''.join(out)
+
+
 def split_row(line):
     """按未转义、且不在行内代码里的 | 切单元格。"""
     cells, buf, i, in_code = [], '', 0, False
@@ -182,21 +200,23 @@ def scan(path):
             continue
 
         # 危险内容（围栏外也查，正文里出现同样会被过滤）
+        plain = mask_inline_code(line)
+
         for rx, why in DANGEROUS:
-            if rx.search(line):
+            if rx.search(plain):
                 rep.add('warn', lineno, why)
                 break
 
         # 文档级 LaTeX
         for rx, why in DOC_LEVEL_TEX:
-            if rx.search(line):
+            if rx.search(plain):
                 rep.add('error', lineno, why)
                 break
 
         # Unicode 数学符号（行内有 $ 时跳过，说明用户已经在用 LaTeX）
-        if '$' not in line:
-            bad = [c for c in line if c in UNICODE_MATH]
-            if bad and not line.lstrip().startswith('#'):
+        if '$' not in plain:
+            bad = [c for c in plain if c in UNICODE_MATH]
+            if bad and not plain.lstrip().startswith('#'):
                 rep.add('hint', lineno, '%s（本行出现 %s）' % (UNICODE_HINT, ''.join(sorted(set(bad))[:4])))
 
         i += 1
@@ -210,7 +230,23 @@ def scan(path):
             rep.add('hint', first_nonblank + 1, '开头建议给一个 # 一级标题：md2pdf 会用它当文档标题和打印文件名')
 
     # ---------- 全文检查：公式与化学式配对 ----------
-    body = '\n'.join(lines)
+    # 只看「正文」：围栏里的代码、行内代码都屏蔽掉，否则讲语法的文档全会误报。
+    # 单独跑一遍是为了保持行号 1:1 对齐（正文里的空行/表格行都留在原位）。
+    prose = []
+    _in, _ch, _len = False, '', 0
+    for ln in lines:
+        _m = FENCE_RE.match(ln)
+        if _in:
+            if _m and _m.group(2)[0] == _ch and len(_m.group(2)) >= _len and not _m.group(3).strip():
+                _in = False
+            prose.append('')
+            continue
+        if _m:
+            _in, _ch, _len = True, _m.group(2)[0], len(_m.group(2))
+            prose.append('')
+            continue
+        prose.append(mask_inline_code(ln))
+    body = '\n'.join(prose)
     for token, pair in (('$$', '$$'), ('\\(', '\\)'), ('\\[', '\\]')):
         cnt = body.count(token)
         if token == '$$':

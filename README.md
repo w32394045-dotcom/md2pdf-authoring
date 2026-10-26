@@ -17,7 +17,7 @@
 
 ## 目录结构
 
-```
+```text
 SKILL.md                              主文件：流程、硬规范、故障对照表、自检清单
 references/markdown-cheatsheet.md     这个工具到底认哪些 Markdown 写法（附不支持清单）
 references/math-and-chem.md           LaTeX 规范 + \ce/\pu 用法与边界 + 常见错法
@@ -86,27 +86,68 @@ cp -r md2pdf-authoring ./.dsh/skills/        # 只给当前仓库用
 
 用 DSH 的安装工具则：
 
-```
+```text
 skill_install source=<本仓库路径>/md2pdf-authoring scope=user
 ```
 
 > ⚠️ 两个坑：**别只复制 SKILL.md**（`references/`、`scripts/` 一丢，说明书里的路径全失效）；
 > **别装成平铺单文件**（会变成 `skills/md2pdf-authoring.md`，资源同样丢失）。
+> 这两个坑我都踩过——现在目录里 `SKILL.md` 是 bundle 形态，装完确认有 5 个文件。
 
-### 方式三：AI 软件没有 Skill 机制（网页版 ChatGPT / 豆包 / Kimi 等）
+### 方式三：AI 软件没有 Skill 机制（网页版 ChatGPT / 豆包 / Kimi / 通义 等）
 
-没有 `skills` 目录、也不支持安装 Skill 的客户端，就用**文件版**：
+没有 `skills` 目录、也不支持安装 Skill 的客户端，**根本不用装**——把内容直接给它就行。
+三种给法，从省事到最省事：
 
-1. 打开仓库里的 [`SKILL.md`](SKILL.md)，把**全文**复制走（包括开头 `---` 之间的 name / description）。
-2. 粘贴到软件的「**系统提示词 / 自定义指令 / 项目知识库 / Agent 配置**」里，保存。
-3. 需要公式、化学式、画图或排错时，再把 `references/` 里对应的那一个 md 一起贴进去
-   （`math-and-chem.md` 管公式化学式，`layout-and-print.md` 管版式画图，`markdown-cheatsheet.md` 管语法）。
-4. 装了 Python 的话，`scripts/check_md.py` 可以本地跑，把输出贴给 AI 让它改。
+**3.1 直接发文件（最省事）**
+
+把 `SKILL.md`（或整份 zip）**作为附件上传 / 拖进对话框**，然后说一句：
+
+```text
+这是一个给 AI 用的写作规范（Skill）。请读里面的 SKILL.md，
+接下来帮我写/改 Markdown 文档时严格按它的规范来（公式用 LaTeX、化学式用 \ce、
+图形用 svg/css/html 渲染型围栏、表格列数≤6、交付前按它的清单自检）。
+如果你还能读 references/ 里的文件，需要时自己去看。
+```
+
+- 大多数网页版都支持拖文件、粘贴文件、或点回形针上传。
+- 能一次发整个仓库（zip / 拖文件夹）更好——`references/` 和 `scripts/` 都在里面，AI 需要时自己去读。
+- 注意：**文件会被当成"参考资料"而不是"规则"**，所以要在那句话里明确「按它来写」，
+  光上传不说，AI 不一定会遵守。
+
+**3.2 直接贴内容（最通用，什么软件都行）**
+
+打开仓库里的 [`SKILL.md`](SKILL.md)，把**全文复制**进对话框发出去
+（包括开头 `---` 之间的 name / description）。习惯的话就存到软件的
+「**系统提示词 / 自定义指令 / 项目知识库 / Agent 配置**」里，之后新建会话自动带上。
+
+需要公式、化学式、画图或排错时，再把 `references/` 里对应的那一个 md 也贴进来：
+
+| 贴哪个 | 管什么 |
+|---|---|
+| `references/math-and-chem.md` | 公式、`\ce` 化学式、`\pu` 单位、常见错法 |
+| `references/layout-and-print.md` | A4 版式、SVG 画图、分页、打印排错 |
+| `references/markdown-cheatsheet.md` | 这个工具支持/不支持哪些 Markdown 写法 |
+
+**3.3 只贴一句话版**
+
+懒得贴全文时，发这一句也能拿到大部分效果：
+
+```text
+以后帮我写 Markdown（要转 PDF/打印的）时按这些规矩来：
+公式一律 LaTeX（$…$ / $$…$$），化学式用 \ce{H2SO4} 这种写法，禁止用 x² √ ≤ → 这类 Unicode 近似；
+画图用 ```svg / ```css / ```html 围栏（SVG 要带 viewBox、文字给 font-size、白底配色）；
+表格列数 ≤ 6 且每行列数一致；需要分页用 <div class="page-break"></div>；
+代码围栏必须标语言；不要写 \usepackage / \begin{document} / \label 这类 LaTeX 文档级命令；
+写完先自检一遍再给我。
+```
 
 这样能得到**八成到九成的效果**，代价有两个：
 
 - 它不会**自动触发**——每次要说明「按 md2pdf 规范来写」，或在会话开头提醒一次；
-- 上下文占用变长（SKILL.md 约 11KB，三份 reference 全贴约 25KB）。
+- 上下文占用变长（SKILL.md 约 12KB，三份 reference 全贴约 26KB）。
+- 附件方式还有个坑：**长文件可能被截断**，或用「文件检索」只索引摘要；感觉它没按规范来，
+  就把关键段落单独再贴一遍。
 
 ### 装完怎么验证真的生效
 
@@ -151,20 +192,26 @@ python scripts/check_md.py --strict 文档.md     # 把 hint 也算失败（接�
 - 是否写了文档级 LaTeX（`\usepackage`、`\begin{document}`、`\label`/`\ref`）——不支持
 - 表格是否超过 6 列、代码行是否超过 100 字符、标题是否跳级
 
-跑 `examples/反例-会被检查脚本逮住.md` 的输出：
+**讲过不误报**：围栏里的代码和行内代码会被屏蔽，所以「文档里教别人怎么写 `\ce{`
+或者说明 `\usepackage` 不支持」不会把自己判成错误（这个误报我踩过，已经修了）。
 
-```
+跑 `examples/反例-会被检查脚本逮住.md` 的真实输出：
+
+```text
+==============================================================
 文档：examples/反例-会被检查脚本逮住.md
         [error] $$ 数量是奇数（1），有一个块级公式没闭合
   L7    [error] 表格这一行有 2 列，表头是 3 列（缺格会让整表错位）
   L8    [error] 表格这一行有 4 列，表头是 3 列（缺格会让整表错位）
   L14   [error] \usepackage 不支持（只用内置引擎）
-  L16   [error] 这个代码围栏没有闭合（行尾缺 ``` 或 ~~~）
-  L19   [error] \ce{ 的花括号没闭合
+  L16   [error] \ce{ 的花括号没闭合
+  L22   [error] 这个代码围栏没有闭合（行尾缺 ``` 或 ~~~）
   L3    [warn] 标题层级跳级（H1 → H4），目录层级会错乱
   L10   [warn] <script> 会被过滤
-  L12   [hint] Unicode 数学符号在公式里会散架，改用 LaTeX（$x^2$、$\le$、$\to$）
+  L12   [hint] Unicode 数学符号在公式里会散架，改用 LaTeX（$x^2$、$\le$、$\to$）（本行出现 ²√）
+--------------------------------------------------------------
 汇总：6 error, 2 warn, 1 hint
+
 [FAIL] 有 6 处 error，先修完再交付。
 ```
 
