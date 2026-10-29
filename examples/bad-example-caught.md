@@ -15,6 +15,10 @@ The formula uses x² and √2 instead of LaTeX.
 
 A chemical formula missing a closing brace: $\ce{H2SO4$
 
+This layout directive is invalid (only `mm`, or no unit for lines, is accepted):
+
+[[gap:3px]]
+
 An unclosed display formula:
 
 $$ \int_0^1 x^2\,dx

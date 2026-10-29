@@ -9,6 +9,13 @@
 退出码: 0 = 没发现 error；1 = 有 error（或 --strict 下有 hint）
 
 只查「会让结果出错」的硬问题，不做风格说教。
+
+内置排版指令也在检查范围内（写法必须独占一行）：
+    [[gap:3]] / [[gap:20mm]]   留白，单位只认 mm 或省略（行）
+    [[rules:3]]                答题横线，只按行数算
+    [[pagebreak]]              强制分页，不能带参数
+写错的形式工具会原样显示成文字（不会报错），所以这里是 error；
+超出 200 行 / 500mm 会被静默截断，也按 error 报。
 """
 
 import os
@@ -41,6 +48,21 @@ DOC_LEVEL_TEX = [
 # Unicode 近似数学符号（在公式外出现时提示）
 UNICODE_MATH = '²³¹⁰⁴⁵⁶⁷⁸⁹≤≥≠≈≢∞√∑∏∫∮→←↔⇒⇔∂∇∈∉⊂⊃∪∩'
 UNICODE_HINT = 'Unicode 数学符号在公式里会散架，改用 LaTeX（$x^2$、$\\le$、$\\to$）'
+
+# ---------------------------------------------------------------- 内置排版指令
+# 工具只认这几种「独占一行」的写法（命令名大小写不敏感）：
+#   [[gap:3]]      空 3 行（1 行 = 正文行高的 1.78em）
+#   [[gap:20mm]]   空 20 毫米（可写小数）
+#   [[rules:3]]    3 条答题横线（行距 1.9em）
+#   [[pagebreak]]  强制分页（只在打印 / 导出 PDF 时换页；屏幕上只是虚线标记）
+DIRECTIVE_MAX_LINES = 200      # 留白行数 / 横线条数上限，超了工具会截断
+DIRECTIVE_MAX_MM = 500         # 留白毫米上限，超了工具会截断
+DIRECTIVE_VALID_RE = re.compile(
+    r'^ {0,3}\[\[(gap|rules|pagebreak)(?::(\d+(?:\.\d+)?)(mm)?)?\]\][ \t]*$', re.I)
+# 只在「像指令」的片段里查：命令名后面不以 ] 收尾的都算写错
+DIRECTIVE_LOOK_RE = re.compile(r'\[\[\s*(gap|rules|pagebreak)\b[^\]]*\]\]', re.I)
+QUOTE_PREFIX_RE = re.compile(r'^>\s?')
+LIST_PREFIX_RE = re.compile(r'^(?:[-*+]|\d{1,9}[.)])[ \t]+')
 
 H1_RE = re.compile(r'^ {0,3}#{1,6}[ \t]+\S')
 HEADING_RE = re.compile(r'^ {0,3}(#{1,6})[ \t]+\S')
@@ -89,6 +111,109 @@ def mask_inline_code(line):
             continue
         out.append('x' if in_code else ch)
     return ''.join(out)
+
+
+def strip_container_prefix(line):
+    """去掉引用块 / 列表记号，拿到容器里这一行的内容。
+
+    指令在引用块和列表项里也生效（`> [[gap:2]]`、`- [[gap:2]]`），
+    所以判断「是否独占一行」要看剥掉容器记号之后剩下什么。
+    """
+    s = line
+    while True:
+        t = s.lstrip(' \t')
+        m = QUOTE_PREFIX_RE.match(t)
+        if m:
+            s = t[m.end():]
+            continue
+        m = LIST_PREFIX_RE.match(t)
+        if m:
+            s = t[m.end():]
+            continue
+        return t
+
+
+def directive_problem(tok, kind):
+    """给一个「像指令但写法不对」的片段，说明它错在哪。"""
+    if kind == 'pagebreak':
+        if tok[2:-2].strip().lower() == 'pagebreak':
+            return '写法不规范（多余空格），只能写 [[pagebreak]]'
+        return 'pagebreak 不接受参数，只能单独写 [[pagebreak]]'
+    inner = tok[2:-2].strip()             # gap:3px
+    rest = inner[len(kind):].lstrip()     # :3px
+    if not rest:
+        return '缺少数量，应写成 [[%s:数字]] 或 [[%s:数字mm]]' % (kind, kind)
+    if not rest.startswith(':'):
+        return '指令名后面要跟半角冒号，例如 [[%s:3]]' % kind
+    arg = rest[1:].strip()
+    if not arg:
+        return '冒号后面缺少数字'
+    if re.match(r'^\d+(?:\.\d+)?[A-Za-z]+$', arg):
+        return '单位只认 mm（省略表示行数），`%s` 不是有效单位' % arg
+    if not re.match(r'^\d', arg):
+        return '数量必须是数字，不能是 `%s`' % arg
+    return '写法不符合 [[%s:数字]] / [[%s:数字mm]]' % (kind, kind)
+
+
+def check_directives(line, lineno, rep):
+    """检查内置排版指令：写法、单位、上限、是否独占一行。
+
+    代码围栏里的内容由主循环跳过（文档里讲语法不误报）；
+    行内代码里的 `[[...]]` 会被 mask_inline_code 屏蔽，也不会误报。
+    """
+    if '[[' not in line:
+        return
+    plain = mask_inline_code(line)
+    if '[[' not in plain:
+        return
+    # 缩进 4 格会被当成缩进代码块（原样显示），不算指令
+    if (len(line) - len(line.lstrip(' ')) >= 4
+            and strip_container_prefix(line) == line.lstrip(' ')):
+        return
+    content = strip_container_prefix(plain)
+
+    m = DIRECTIVE_VALID_RE.match(content)
+    if m:
+        kind = m.group(1).lower()
+        token = m.group(0).strip()
+        if kind == 'pagebreak':
+            if m.group(2) is not None:
+                rep.add('error', lineno,
+                        '%s 带了参数，会被当普通文字显示；只写 [[pagebreak]]' % token)
+            return
+        val = float(m.group(2))
+        has_mm = bool(m.group(3))
+        if val <= 0:
+            rep.add('error', lineno,
+                    '%s 的数量必须大于 0；0 会被当普通文字显示' % token)
+            return
+        if kind == 'rules':
+            if has_mm:
+                rep.add('error', lineno,
+                        '%s 只按行数算，没有毫米单位；改成 [[rules:3]] 这种写法' % token)
+            elif val > DIRECTIVE_MAX_LINES:
+                rep.add('error', lineno,
+                        '%s 超过上限 %d 条，工具会截断到上限'
+                        % (token, DIRECTIVE_MAX_LINES))
+            return
+        limit, unit = (DIRECTIVE_MAX_MM, 'mm') if has_mm else (DIRECTIVE_MAX_LINES, '行')
+        if val > limit:
+            rep.add('error', lineno,
+                    '%s 超过上限 %d %s，工具会截断到上限' % (token, limit, unit))
+        return
+
+    # 不是独立一行的合法写法：分「整行就是坏指令」和「指令混在正文里」两种情况
+    for am in DIRECTIVE_LOOK_RE.finditer(content):
+        tok = am.group(0)
+        rest = (content[:am.start()] + content[am.end():]).strip()
+        if rest:
+            rep.add('hint', lineno,
+                    '排版指令必须独占一行（前后不能有其他文字），否则会原样显示成文字')
+            return
+        kind = am.group(1).lower()
+        rep.add('error', lineno,
+                '%s 会原样显示成文字：%s' % (tok, directive_problem(tok, kind)))
+        return
 
 
 def split_row(line):
@@ -183,6 +308,9 @@ def scan(path):
             last_heading = lv
             i += 1
             continue
+
+        # 内置排版指令：[[gap:…]] / [[rules:…]] / [[pagebreak]]
+        check_directives(line, lineno, rep)
 
         # 表格
         if '|' in line and i + 1 < n and TABLE_SEP_RE.match(lines[i + 1]) and '-' in lines[i + 1]:

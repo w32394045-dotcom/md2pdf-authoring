@@ -11,11 +11,13 @@ A **Skill** — instructions for an AI agent, plus a linter — that solves two 
    open, load, set up, print to PDF, export a standalone HTML; which step cannot be skipped.
 2. **The agent knows how to write Markdown that renders and prints correctly** —
    maths in LaTeX (chemistry via `\ce`, units via `\pu`), figures in render fences (`svg` / `css` / `html`),
-   tables that don't blow out the page, page breaks that behave, and a linter run before delivery.
+   tables that don't blow out the page; layout spacing via `[[gap:N]]`, answer lines via `[[rules:N]]`,
+   forced page breaks via `[[pagebreak]]`; and a linter run before delivery.
 
 > Without this, models still write Markdown — they just get the usual things wrong:
 > `x²`/`√` instead of LaTeX, bare `H2SO4`, a nine-column table squeezed onto A4,
-> asking for a picture and getting a code block, or wrapping the whole `.md` in a fence so nothing renders.
+> asking for a picture and getting a code block, wrapping the whole `.md` in a fence so nothing renders,
+> padding with blank lines that Markdown silently collapses, or inventing HTML for page breaks.
 
 **Can't be bothered to install it?** Section "Install → Option 1" below has a prompt you can paste straight
 into your agent (Claude Code / Codex / DSH / Cursor). It downloads, installs, and verifies itself.
@@ -28,12 +30,32 @@ references/markdown-cheatsheet.md     what this tool's Markdown subset actually 
 references/math-and-chem.md           LaTeX conventions + \ce/\pu usage, limits, common mistakes
 references/layout-and-print.md        A4 layout, SVG drawing rules, page breaks, print troubleshooting
 scripts/check_md.py                   pre-delivery linter (stdlib only, no dependencies)
-examples/sample-notes.md              a Chinese positive example that passes the linter
-examples/bad-example-caught.md        a deliberately broken file, to show what the linter catches
+examples/sample-notes.md              an English positive example (with spacing / answer-line / break directives and footnotes)
+examples/bad-example-caught.md        a deliberately broken file, to show what the linter catches (including a bad directive)
 ```
 
-> The `examples/` files are in Chinese on purpose (they double as a fixture for the Chinese README);
-> the linter's rules are language-agnostic.
+> The `examples/` files come in Chinese/English pairs; the linter's rules are language-agnostic.
+
+## What's new in the companion tool (v2 / v3)
+
+The Skill only covers *how to write*; these are the md2pdf features added this round that matter while writing,
+already folded into `SKILL.md` wherever they affect a writing decision:
+
+- **Built-in layout directives (v3)**: `[[gap:3]]` — 3 blank lines; `[[gap:20mm]]` — 20 mm of space;
+  `[[rules:3]]` — 3 answer lines; `[[pagebreak]]` — forced page break. Must sit alone on their own line;
+  invalid forms show up as literal text; caps are 200 lines / rules and 500 mm.
+- **Three footnote placements**: end of document / next to the reference (same page when printed) / both.
+  Syntax is still a plain `[^1]`; the reader picks the placement in settings.
+- **Per-page decorations**: author card (avatar + text; top / bottom / every page top / every page bottom) and
+  a page info bar (once at the end / on every page, two independent switches). They hug the page edge when printed.
+- **Backgrounds & avatars**: page background image (A4 / A5 / Letter / square / circle crop), background opacity,
+  content-surface opacity; avatar upload, crop and reuse. Print needs "Background graphics" ticked in the print dialog.
+- **Richer accent colour**: 7 presets + free colour wheel + `#RRGGBB` + "pick from image" + the 24 most recent colours.
+- **File history**: autosaved after ~2.6 s of inactivity, up to 50 entries, with time / word count / size (IndexedDB, local only).
+- **Image persistence**: local images picked together with the `.md` the first time are stored locally,
+  so reopening the same document no longer asks for them (an old bug).
+- **Settings export / import as JSON** (excludes background image, avatar, document images and the font library).
+- **Rewritten built-in samples in 7 languages**, covering directives, footnotes, backgrounds, avatars and per-page decorations — usable as templates.
 
 ## Install
 
@@ -99,7 +121,8 @@ skill_install source=<path to this repo>/md2pdf-authoring scope=user
 
 > ⚠️ Two traps: **don't copy only SKILL.md** (lose `references/` and `scripts/`, and every path inside breaks),
 > and **don't install it as a flat file** (it becomes `skills/md2pdf-authoring.md` with the same loss).
-> Both traps are real — I hit them. After installing, check that there are 5 files.
+> Both traps are real — I hit them. After installing, check that `SKILL.md`, `references/` (3 markdown files),
+> `scripts/check_md.py` and `examples/` are all there.
 
 ### Option 3 — your AI has no skill mechanism (web ChatGPT / Kimi / Doubao / Tongyi …)
 
@@ -143,9 +166,10 @@ If you don't want to paste 12 KB, this sentence already gets most of the benefit
 Whenever you write Markdown meant for PDF or print: use LaTeX for all maths ($…$ / $$…$$),
 write chemistry as \ce{H2SO4}, never use Unicode approximations like x² √ ≤ →, draw figures with
 ```svg / ```css / ```html fences (SVG needs viewBox, explicit font-size, colours for white paper),
-keep tables to 6 columns or fewer with a consistent column count, use <div class="page-break"></div>
-for page breaks, always tag code fences with a language, and never use \usepackage / \begin{document} /
-\label. Self-check before handing it over.
+keep tables to 6 columns or fewer with a consistent column count, use [[gap:3]] or [[gap:20mm]] for spacing,
+[[rules:3]] for answer lines and [[pagebreak]] for page breaks — each on its own line, never pad with blank lines,
+write footnotes as [^1] and let the reader choose where they print, always tag code fences with a language,
+and never use \usepackage / \begin{document} / \label. Self-check before handing it over.
 ```
 
 Expect **80–90% of the benefit**. The cost: it does not trigger automatically (remind it, or say "follow the
@@ -192,7 +216,10 @@ What it checks:
 - Unicode maths approximations (`x²`, `√2`, `≤`) — they fall apart inside formulas
 - unbalanced `\ce{` / `\pu{` braces
 - document-level LaTeX that is not supported (`\usepackage`, `\begin{document}`, `\label`/`\ref`)
+- **layout directives**: standalone line, valid syntax / unit / count, and caps (200 lines or rules, 500 mm) —
+  a malformed directive is silently printed as text by the tool, so the linter reports it as an error
 - tables wider than 6 columns, code lines over 100 characters, skipped heading levels
+- the legacy `<div class="page-break"></div>` is **not** flagged (still supported, no forced migration)
 
 It does **not** fire on documentation: code fences and inline code are masked before checking, so a file that
 *explains* `\ce{` or `\usepackage` is not flagged (that false positive existed once; it is fixed).
@@ -207,14 +234,15 @@ Real output for `examples/bad-example-caught.md`:
   L8    [error] 表格这一行有 4 列，表头是 3 列（缺格会让整表错位）
   L14   [error] \usepackage 不支持（只用内置引擎）
   L16   [error] \ce{ 的花括号没闭合
-  L22   [error] 这个代码围栏没有闭合（行尾缺 ``` 或 ~~~）
+  L20   [error] [[gap:3px]] 会原样显示成文字：单位只认 mm（省略表示行数），`3px` 不是有效单位
+  L26   [error] 这个代码围栏没有闭合（行尾缺 ``` 或 ~~~）
   L3    [warn] 标题层级跳级（H1 → H4），目录层级会错乱
   L10   [warn] <script> 会被过滤
   L12   [hint] Unicode 数学符号在公式里会散架，改用 LaTeX（$x^2$、$\le$、$\to$）（本行出现 ²√）
 --------------------------------------------------------------
-汇总：6 error, 2 warn, 1 hint
+汇总：7 error, 2 warn, 1 hint
 
-[FAIL] 有 6 处 error，先修完再交付。
+[FAIL] 有 7 处 error，先修完再交付。
 ```
 
 (The report text is in Chinese; `--strict` only changes the exit code.)
