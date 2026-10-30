@@ -5,7 +5,7 @@
 
 **English** · [简体中文](README.zh-CN.md)
 
-A **Skill** — instructions for an AI agent, plus a linter — that solves two things:
+A **Skill** — instructions for an AI agent, plus two scripts (a linter and an image→base64 converter) — that solves two things:
 
 1. **The agent knows how to drive [md2pdf](https://github.com/w32394045-dotcom/md2pdf)** —
    open, load, set up, print to PDF, export a standalone HTML; which step cannot be skipped.
@@ -29,7 +29,8 @@ SKILL.md                              main instructions: workflow, hard rules, t
 references/markdown-cheatsheet.md     what this tool's Markdown subset actually supports (and what it doesn't)
 references/math-and-chem.md           LaTeX conventions + \ce/\pu usage, limits, common mistakes
 references/layout-and-print.md        A4 layout, SVG drawing rules, page breaks, print troubleshooting
-scripts/check_md.py                   pre-delivery linter (stdlib only, no dependencies)
+scripts/check_md.py                   pre-delivery linter (stdlib only, no dependencies; also checks images)
+scripts/img2base64.py                 image → base64 embedder (stdlib only; uses Pillow to downsize when available)
 examples/sample-notes.md              an English positive example (with spacing / answer-line / break directives and footnotes)
 examples/bad-example-caught.md        a deliberately broken file, to show what the linter catches (including a bad directive)
 ```
@@ -53,9 +54,11 @@ already folded into `SKILL.md` wherever they affect a writing decision:
   content-surface opacity; avatar upload, crop and reuse. Print needs "Background graphics" ticked in the print dialog.
 - **Richer accent colour**: 7 presets + free colour wheel + `#RRGGBB` + "pick from image" + the 24 most recent colours.
 - **File history**: autosaved after ~2.6 s of inactivity, up to 50 entries, with time / word count / size (IndexedDB, local only).
-- **Base64 image embedding**: the toolbar’s “🖼 Image” button downsizes a picture to 1600 px on the long edge
-  and writes it into the Markdown as base64, so it survives sending the file or switching computers. Local paths
-  (`![](fig1.png)`) and external links are unreliable — don’t use them.
+- **Images embedded as base64, with a converter**: `scripts/img2base64.py` turns local image files into
+  Markdown with inline base64 (`--insert doc.md fig1.png` replaces `<!--img-->` placeholders), so the AI never
+  has to copy megabytes of base64 into its context. Stdlib only; with Pillow installed, `--max-edge 1600`
+  downsizes first. The toolbar’s “🖼 Image” button in md2pdf (pick / paste / drop) does the same thing and is
+  fully compatible. Local paths (`![](fig1.png)`) and external links are unreliable — don’t use them.
 - **Large documents fall back to IndexedDB**: once embedded images push the document past the localStorage quota,
   the text is stored in the local database instead, so a reload doesn’t lose it.
 - **Settings export / import as JSON** (excludes background image, avatar, document images and the font library).
@@ -77,8 +80,9 @@ Please install a skill for me: md2pdf-authoring.
 
 Source repository: https://github.com/w32394045-dotcom/md2pdf-authoring
 What it is: an instruction file for AI agents (SKILL.md) + references (three markdown files in references/)
-+ a linter (scripts/check_md.py). It teaches an AI to use md2pdf (a Markdown→PDF tool) correctly and to
-produce Markdown whose maths, chemistry, figures and tables render and print correctly.
++ tools (scripts/check_md.py linter, scripts/img2base64.py image→base64 converter). It teaches an AI to use
+md2pdf (a Markdown→PDF tool) correctly and to produce Markdown whose maths, chemistry, figures, images and
+tables render and print correctly.
 
 Please do the following, in order:
 
@@ -97,7 +101,8 @@ Please do the following, in order:
 
 3. After installing, verify three things and report the results to me:
    a) md2pdf-authoring shows up in your skill list and is valid;
-   b) the directory contains SKILL.md, references/ (three .md files) and scripts/check_md.py;
+   b) the directory contains SKILL.md, references/ (three .md files), scripts/check_md.py and
+      scripts/img2base64.py;
    c) running `python scripts/check_md.py examples/sample-notes.md` prints a report (expect 0 errors, exit 0).
 
 4. If any step fails, tell me exactly where: path missing, permission denied, client doesn't support skills,
@@ -192,6 +197,12 @@ python ~/.dsh/skills/md2pdf-authoring/scripts/check_md.py \
        ~/.dsh/skills/md2pdf-authoring/examples/sample-notes.md
 #    expect: 0 errors, 0 warnings, 0 hints / [OK]
 
+# 2b. the image → base64 tool runs (printing --help is enough)
+python ~/.dsh/skills/md2pdf-authoring/scripts/img2base64.py --help
+#    try: python .../img2base64.py --insert doc.md fig1.png
+#    (put <!--img--> placeholders in doc.md first; they are replaced with
+#     ![fig1](data:image/png;base64,…))
+
 # 3. ask the AI a test question — correct answers show the spec loaded:
 #    "Write a short Markdown snippet with a quadratic equation and a chemical equation, md2pdf-style"
 #    good sign: $…$ maths, \ce{} chemistry, no x² / √ / ≤
@@ -224,6 +235,9 @@ What it checks:
   and caps (200 lines or rules, 500 mm) — a malformed directive is silently printed as text by the tool,
   so the linter reports it as an error
 - tables wider than 6 columns, code lines over 100 characters, skipped heading levels
+- **images**: local paths (`![](fig1.png)`) and external links → warnings (the browser cannot read them and
+  offline printing is unreliable); `data:image/…;base64,…` → checks that the base64 decodes, that the file
+  header matches the declared mime type, and hints when a single image is very large
 - the legacy `<div class="page-break"></div>` is **not** flagged (still supported, no forced migration)
 
 It does **not** fire on documentation: code fences and inline code are masked before checking, so a file that
@@ -251,6 +265,36 @@ Real output for `examples/bad-example-caught.md`:
 ```
 
 (The report text is in Chinese; `--strict` only changes the exit code.)
+
+## The image → base64 tool
+
+Images in the Markdown have to be **base64-embedded** (`![fig1](data:image/png;base64,…)`) — a browser cannot
+read a local path, and local paths break when the file is printed, exported or moved. This stdlib script does
+the conversion:
+
+```bash
+# Recommended: put <!--img--> placeholders in the .md, then let the script fill them in
+python scripts/img2base64.py --insert notes.md fig1.png fig2.jpg
+#   → 已替换 2 个占位符（L5、L9）; no placeholders → appended at the end
+
+# custom placeholder
+python scripts/img2base64.py --insert notes.md --marker "[[IMG]]" fig1.png
+
+# big photos: downsize to 1600 px on the long edge first (needs Pillow; otherwise embedded as-is)
+python scripts/img2base64.py --max-edge 1600 --insert notes.md photo.jpg
+
+# other outputs
+python scripts/img2base64.py fig1.png          # stdout: Markdown snippet
+python scripts/img2base64.py --uri logo.svg    # stdout: data URI
+python scripts/img2base64.py --json fig1.png   # metadata only (no base64 payload)
+python scripts/img2base64.py --out snippet.md fig1.png
+```
+
+- png / jpg / gif / webp / avif / bmp / svg / ico, detected by **file signature** (a wrong extension is fine).
+- Why `--insert`: a multi-megabyte base64 string stays in the file instead of the model's context — copying it
+  by hand always loses characters.
+- Keep each embedded image at ≤ 300 KB (the script warns above 400 KB); `--max-edge 1600` ≈ 240 dpi on A4.
+- The “🖼 Image” button in md2pdf is the same tool with a GUI (pick / paste / drop) and is fully compatible.
 
 ## Good fit / not a fit
 

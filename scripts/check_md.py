@@ -16,8 +16,17 @@
     [[pagebreak]]              强制分页，不能带参数
 写错的形式工具会原样显示成文字（不会报错），所以这里是 error；
 超出 200 行 / 500mm 会被静默截断（并排多个时按合计算），也按 error 报。
+
+图片也在检查范围内（base64 内嵌是推荐写法）：
+    本地路径（`![](图1.png)`、`![](C:\\…\\1.png)`）→ warn：浏览器读不到，打印 / 导出会丢图
+    外链（`![](https://…)`）→ warn：离线打印不可靠
+    `data:image/…;base64,…` → 校验 base64 能解码、文件头与 mime 对得上；单张过大给 hint
+用 scripts/img2base64.py 把本地图片转成 base64 再写进 Markdown。
 """
 
+import argparse
+import base64
+import binascii
 import os
 import re
 import sys
@@ -65,6 +74,95 @@ DIRECTIVE_LOOK_RE = re.compile(r'\[\[\s*(gap|rules|pagebreak)\b[^\]]*\]\]', re.I
 QUOTE_PREFIX_RE = re.compile(r'^>\s?')
 LIST_PREFIX_RE = re.compile(r'^(?:[-*+]|\d{1,9}[.)])[ \t]+')
 
+# ---------------------------------------------------------------- 图片
+# Markdown 行内图片：![alt](url "title")
+IMAGE_RE = re.compile(r'!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+["\']([^"\']*)["\'])?\s*\)')
+IMAGE_MAX_HINT = 1024 * 1024          # base64 后单张超过 1MB 给 hint
+IMAGE_MAX_WARN = 3 * 1024 * 1024      # 超过 3MB 给 warn
+DATA_IMAGE_MAGIC = {
+    'image/png': (b'\x89PNG\r\n\x1a\n',),
+    'image/jpeg': (b'\xff\xd8\xff',),
+    'image/jpg': (b'\xff\xd8\xff',),
+    'image/gif': (b'GIF87a', b'GIF89a'),
+    'image/bmp': (b'BM',),
+    'image/x-icon': (b'\x00\x00\x01\x00',),
+    'image/vnd.microsoft.icon': (b'\x00\x00\x01\x00',),
+}
+
+
+def image_magic_ok(mime, head):
+    """文件头是不是这个 mime 该有的样子（防把改坏的 base64 当正常）。"""
+    if mime == 'image/webp':
+        return head[:4] == b'RIFF' and head[8:12] == b'WEBP'
+    if mime == 'image/avif':
+        return head[4:12] in (b'ftypavif', b'ftypavis')
+    if mime == 'image/svg+xml':
+        low = head.lower().lstrip()
+        return b'<svg' in low or low.startswith(b'<?xml')
+    magic = DATA_IMAGE_MAGIC.get(mime)
+    return bool(magic and any(head.startswith(m) for m in magic))
+
+
+def check_images(line, lineno, rep):
+    """检查正文里的图片写法：本地路径 / 外链 / base64。
+
+    推荐写法是 base64 内嵌（scripts/img2base64.py 生成）——本地路径浏览器读不到，
+    外链离线打印不可靠。代码围栏里的内容由主循环跳过，行内代码里的示例被屏蔽。
+    """
+    if '![' not in line:
+        return
+    plain = mask_inline_code(line)
+    for m in IMAGE_RE.finditer(plain):
+        alt, target = m.group(1), m.group(2)
+        if not alt.strip() and not rep.img_alt_hinted:
+            rep.img_alt_hinted = True
+            rep.add('hint', lineno, '图片建议写 alt 文字（图没出来 / 导出 HTML 时还能看出是什么）；这一条只提示一次')
+        low = target.lower()
+        if low.startswith('data:'):
+            dm = re.match(r'^data:image/([a-z0-9.+-]+)((?:;[^,]*)?),(.*)$', target, re.I | re.S)
+            if not dm:
+                rep.add('warn', lineno,
+                        '图片 data URI 写法不规范：写成 data:image/png;base64,…（SVG 是 image/svg+xml）')
+                continue
+            mime = 'image/' + dm.group(1).lower()
+            params = (dm.group(2) or '').lower()
+            payload = dm.group(3)
+            if 'base64' not in params:
+                rep.add('hint', lineno, '图片 data URI 建议用 base64：data:%s;base64,…' % mime)
+                continue
+            b64 = re.sub(r'\s+', '', payload)
+            try:
+                data = base64.b64decode(b64, validate=True)
+            except (binascii.Error, ValueError):
+                rep.add('error', lineno,
+                        '图片 base64 解码失败（内容被截断 / 改坏了）：%s…' % m.group(0)[:32])
+                continue
+            if not data:
+                rep.add('error', lineno, '图片 base64 是空的')
+                continue
+            if not image_magic_ok(mime, data[:32]):
+                rep.add('warn', lineno,
+                        '图片 data URI 声明的类型（%s）和实际文件头对不上，可能显示不出来' % mime)
+            size = len(data)
+            if size > IMAGE_MAX_WARN:
+                rep.add('warn', lineno,
+                        '单张图 %.1f MB，`.md` 会非常大；先用 --max-edge 1600 压一下' % (size / 1048576.0))
+            elif size > IMAGE_MAX_HINT:
+                rep.add('hint', lineno,
+                        '单张图 %d KB，偏大；单张控制在 200—300KB（或用 --max-edge 1600）' % (size // 1024))
+            continue
+        if low.startswith(('http://', 'https://', '//')):
+            rep.add('warn', lineno,
+                    '外链图片在离线打印 / 导出里不可靠；下载后用 scripts/img2base64.py 转 base64 内嵌')
+            continue
+        if low.startswith('file:'):
+            rep.add('warn', lineno,
+                    'file: 图片在浏览器里读不到；用 scripts/img2base64.py 转 base64 内嵌')
+            continue
+        rep.add('warn', lineno,
+                '本地路径图片（%s）浏览器读不到，打印 / 导出会丢图；'
+                '用 scripts/img2base64.py 转 base64 内嵌（或在 md2pdf 里点「🖼 图片」重插）' % target[:60])
+
 H1_RE = re.compile(r'^ {0,3}#{1,6}[ \t]+\S')
 HEADING_RE = re.compile(r'^ {0,3}(#{1,6})[ \t]+\S')
 TABLE_SEP_RE = re.compile(r'^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$')
@@ -73,6 +171,7 @@ TABLE_SEP_RE = re.compile(r'^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$')
 class Report(object):
     def __init__(self):
         self.items = []          # (level, line, msg)
+        self.img_alt_hinted = False   # 「图片没写 alt」只提醒一次，不刷屏
 
     def add(self, level, line, msg):
         self.items.append((level, line, msg))
@@ -375,6 +474,9 @@ def scan(path):
 
         # 内置排版指令：[[gap:…]] / [[rules:…]] / [[pagebreak]]
         check_directives(line, lineno, rep)
+
+        # 图片：本地路径 / 外链 / base64
+        check_images(line, lineno, rep)
 
         # 表格
         if '|' in line and i + 1 < n and TABLE_SEP_RE.match(lines[i + 1]) and '-' in lines[i + 1]:

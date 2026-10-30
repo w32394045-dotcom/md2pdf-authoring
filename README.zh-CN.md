@@ -2,7 +2,7 @@
 
 [English](README.md) · **简体中文**
 
-一个 **Skill**（给 AI agent 读的说明书 + 自检脚本），解决两件事：
+一个 **Skill**（给 AI agent 读的说明书 + 两个脚本：自检、图片转 base64），解决两件事：
 
 1. **AI 知道怎么正确使用 [md2pdf](https://github.com/w32394045-dotcom/md2pdf)**——
    打开、载入、设置、打印另存为 PDF、导出独立 HTML，哪一步不能跳。
@@ -26,7 +26,8 @@ SKILL.md                              主文件：流程、硬规范、故障对
 references/markdown-cheatsheet.md     这个工具到底认哪些 Markdown 写法（附不支持清单）
 references/math-and-chem.md           LaTeX 规范 + \ce/\pu 用法与边界 + 常见错法
 references/layout-and-print.md        A4 版式、SVG 画图规范、分页、打印排错
-scripts/check_md.py                   交付前自检脚本（纯标准库，无依赖）
+scripts/check_md.py                   交付前自检脚本（纯标准库，无依赖；也查图片写法）
+scripts/img2base64.py                 图片转 base64 内嵌工具（纯标准库；装了 Pillow 可压缩）
 examples/示例-讲义.md                 一份能通过检查的正例（含留白 / 横线 / 分页指令与脚注）
 examples/反例-会被检查脚本逮住.md       一份故意写坏的反例（看脚本能查出什么，含非法指令）
 ```
@@ -46,15 +47,14 @@ Skill 本身只管「怎么写」，下面这些是配套工具 md2pdf 本轮新
   头像可上传、裁剪、复用。打印时背景要在打印界面勾「背景图形」。
 - **主题色增强**：7 套预设 + 色环任意取色 + 直接填 `#RRGGBB` + 「从图片提取主题色」+ 最近 24 个历史配色。
 - **历史文件**：停笔约 2.6 秒自动保存，最多 50 条，显示时间 / 字数 / 占用（IndexedDB，本机）。
-- **图片 base64 内嵌**：顶栏「🖼 图片」把图压到长边 1600px 后以 base64 写进正文，换电脑 / 发给别人都不会丢图；
-  本地路径（`![](图1.png)`）和外链不可靠，别再写。
+- **图片转 base64 工具**：`scripts/img2base64.py` 把本地图片压成 base64 写进 Markdown（`--insert 文档.md 图1.png` 自动替换 `<!--img-->` 占位符），AI 不用把几 MB 的 base64 读进上下文；纯标准库，装了 Pillow 时可用 `--max-edge 1600` 自动压缩。md2pdf 顶栏「🖼 图片」做的是同一件事（选图 / 粘贴 / 拖入），两边产物完全兼容。
 - **大正文自动落库**：正文里嵌多了图片、超过 localStorage 容量时，自动改存 IndexedDB，刷新不丢。
 - **设置导出 / 导入 JSON**：换设备带走设置与扩展；不含背景图、头像、正文图片、字体库。
 - **7 语言内置示例重写**：示例覆盖排版指令、脚注、背景、头像、每页装饰等，可直接当模板。
 
 ## 安装
 
-先说清楚：**这个仓库是「Skill」**——给 AI 读的说明书（`SKILL.md`）+ 参考资料 + 一个自检脚本，
+先说清楚：**这个仓库是「Skill」**——给 AI 读的说明书（`SKILL.md`）+ 参考资料 + 两个脚本（自检 / 图片转 base64），
 不是双击就用的软件。真正干活的是配套工具 [md2pdf](https://github.com/w32394045-dotcom/md2pdf)（一个 HTML 文件）。
 
 装它 = 让 AI 知道这些规范。三条路，按你手上有什么挑一条。
@@ -69,7 +69,7 @@ Skill 本身只管「怎么写」，下面这些是配套工具 md2pdf 本轮新
 
 来源仓库：https://github.com/w32394045-dotcom/md2pdf-authoring
 它是什么：一份给 AI 读的说明书（SKILL.md）+ 参考资料（references/ 三个 md）+
-自检脚本（scripts/check_md.py）。作用是教 AI 正确使用 md2pdf（Markdown→PDF 工具），
+自检脚本（scripts/check_md.py）+ 图片转 base64 工具（scripts/img2base64.py）。作用是教 AI 正确使用 md2pdf（Markdown→PDF 工具），
 并写出「公式、化学式、图表都渲染正确、打印不出血」的 Markdown。
 
 请按顺序执行：
@@ -88,7 +88,7 @@ Skill 本身只管「怎么写」，下面这些是配套工具 md2pdf 本轮新
 
 3. 装完做三项验证，并把结果告诉我：
    a) 你的 Skill 列表里能看到 md2pdf-authoring，状态正常；
-   b) 目录里有 SKILL.md、references/（3 个 md）、scripts/check_md.py；
+   b) 目录里有 SKILL.md、references/（3 个 md）、scripts/check_md.py 和 scripts/img2base64.py；
    c) 运行 python scripts/check_md.py examples/示例-讲义.md，能打印检查结果
       （预期 0 error 并退出码 0）。
 
@@ -189,6 +189,11 @@ python ~/.dsh/skills/md2pdf-authoring/scripts/check_md.py \
        ~/.dsh/skills/md2pdf-authoring/examples/示例-讲义.md
 #    期望：汇总 0 error, 0 warn, 0 hint / [OK] 通过
 
+# 2b. 图片转 base64 工具能跑（--help 能打出来就行）
+python ~/.dsh/skills/md2pdf-authoring/scripts/img2base64.py --help
+#    实测：python .../img2base64.py --insert 文档.md 图1.png
+#    （文档里先写 <!--img--> 占位符，脚本会替换成 ![图1](data:image/png;base64,…)）
+
 # 3. 问 AI 一句测试题（能答对说明规范已加载）
 #    「写一个含二元一次方程组和化学方程式的 Markdown 小片段，按 md2pdf 规范来」
 #    正确表现：公式用 $…$、化学式用 \ce{}、不用 x² / √ / ≤ 这类 Unicode 近似
@@ -221,6 +226,8 @@ python scripts/check_md.py --strict 文档.md     # 把 hint 也算失败（接�
 - **排版指令**是否单独成行（一行多个时按合计算上限）、写法 / 单位 / 数量是否合法、是否超上限（200 行 / 条、500mm）——
   写错的指令工具不报错、只会原样显示成文字，所以脚本替你报 error
 - 表格是否超过 6 列、代码行是否超过 100 字符、标题是否跳级
+- **图片写法**：本地路径（`![](图1.png)`）/ 外链 → warn（浏览器读不到 / 离线打印不可靠）；
+  `data:image/…;base64,…` → 校验 base64 能解码、文件头与 mime 对得上、单张过大给提示
 - 旧写法 `<div class="page-break"></div>` **不报错**（仍兼容，不强制迁移）
 
 **讲过不误报**：围栏里的代码和行内代码会被屏蔽，所以「文档里教别人怎么写 `\ce{`
@@ -246,6 +253,34 @@ python scripts/check_md.py --strict 文档.md     # 把 hint 也算失败（接�
 
 [FAIL] 有 7 处 error，先修完再交付。
 ```
+
+## 图片转 base64 工具
+
+Markdown 里的图片要用 base64 内嵌（`![图1](data:image/png;base64,…)`）——本地路径在浏览器里读不到，
+打印、导出、换电脑都会丢图。这个脚本负责转换，纯标准库：
+
+```bash
+# 推荐：先在 .md 里写 <!--img--> 占位符，再让脚本依次替换
+python scripts/img2base64.py --insert 讲义.md 图1.png 图2.jpg
+#   → 已替换 2 个占位符（L5、L9）；没有占位符就追加到文末
+
+# 自定义占位符
+python scripts/img2base64.py --insert 讲义.md --marker "[[图片]]" 图1.png
+
+# 大照片先压到长边 1600px（需要 Pillow，没装就原样嵌入并提示）
+python scripts/img2base64.py --max-edge 1600 --insert 讲义.md 照片.jpg
+
+# 其他输出形态
+python scripts/img2base64.py 图1.png          # stdout：Markdown 片段
+python scripts/img2base64.py --uri logo.svg   # stdout：data URI
+python scripts/img2base64.py --json 图1.png   # 元数据（不含 base64 全文）
+python scripts/img2base64.py --out 片段.md 图1.png
+```
+
+- 支持 png / jpg / gif / webp / avif / bmp / svg / ico，按文件头判断（扩展名写错也能认）。
+- 为什么用 `--insert`：几 MB 的 base64 只进文件、不进上下文；手抄一定出错。
+- 单张 base64 后建议 ≤ 300KB（默认超过 400KB 会提醒）；`--max-edge 1600` 约等于 A4 240dpi。
+- md2pdf 顶栏「🖼 图片」是同一件事的图形入口（选图 / 粘贴 / 拖入），两边产物完全兼容。
 
 ## 适用 / 不适用
 

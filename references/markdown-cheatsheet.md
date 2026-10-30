@@ -134,6 +134,13 @@ console.log('语言标记决定高亮')
 
 - **图片要 base64 内嵌**：写成 `![说明](data:image/png;base64,…)`（JPEG 用 `data:image/jpeg;base64,…`）。
   这样图片就在 `.md` 里，打印、导出 HTML、换电脑、发给别人都不会丢。
+- **用脚本转（推荐，别手抄 base64）**：
+  ```bash
+  python scripts/img2base64.py --insert 文档.md 图1.png 图2.jpg   # 替换 <!--img--> 占位符
+  python scripts/img2base64.py --max-edge 1600 --insert 文档.md 照片.jpg   # 大图先压缩
+  python scripts/img2base64.py 图1.png        # stdout 直接给 Markdown 片段
+  python scripts/img2base64.py --uri logo.svg # 只给 data URI
+  ```
 - **不要让 AI 手写本地路径**：`![](图1.png)`、`![](C:\…\1.png)` 在浏览器里读不到，换个目录就丢；
   打印 / 导出时也不会被打包。外链 `![](https://…)` 在离线打印里同样不可靠。
 - **让用户在工具里插图**：点顶栏「🖼 图片」选图（或在编辑器里粘贴 / 拖入）——工具会自动压缩
