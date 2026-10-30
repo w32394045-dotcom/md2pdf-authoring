@@ -10,12 +10,12 @@
 
 只查「会让结果出错」的硬问题，不做风格说教。
 
-内置排版指令也在检查范围内（写法必须独占一行）：
+内置排版指令也在检查范围内（必须单独成行；一行可以并排写几个）：
     [[gap:3]] / [[gap:20mm]]   留白，单位只认 mm 或省略（行）
     [[rules:3]]                答题横线，只按行数算
     [[pagebreak]]              强制分页，不能带参数
 写错的形式工具会原样显示成文字（不会报错），所以这里是 error；
-超出 200 行 / 500mm 会被静默截断，也按 error 报。
+超出 200 行 / 500mm 会被静默截断（并排多个时按合计算），也按 error 报。
 """
 
 import os
@@ -50,15 +50,16 @@ UNICODE_MATH = '²³¹⁰⁴⁵⁶⁷⁸⁹≤≥≠≈≢∞√∑∏∫∮→�
 UNICODE_HINT = 'Unicode 数学符号在公式里会散架，改用 LaTeX（$x^2$、$\\le$、$\\to$）'
 
 # ---------------------------------------------------------------- 内置排版指令
-# 工具只认这几种「独占一行」的写法（命令名大小写不敏感）：
+# 工具只认这几种「单独成行」的写法（命令名大小写不敏感；一行可以并排写多个，
+# 指令之间只允许空白，整行再夹正文就整行失效）：
 #   [[gap:3]]      空 3 行（1 行 = 正文行高的 1.78em）
 #   [[gap:20mm]]   空 20 毫米（可写小数）
 #   [[rules:3]]    3 条答题横线（行距 1.9em）
 #   [[pagebreak]]  强制分页（只在打印 / 导出 PDF 时换页；屏幕上只是虚线标记）
 DIRECTIVE_MAX_LINES = 200      # 留白行数 / 横线条数上限，超了工具会截断
 DIRECTIVE_MAX_MM = 500         # 留白毫米上限，超了工具会截断
-DIRECTIVE_VALID_RE = re.compile(
-    r'^ {0,3}\[\[(gap|rules|pagebreak)(?::(\d+(?:\.\d+)?)(mm)?)?\]\][ \t]*$', re.I)
+DIRECTIVE_TOKEN_RE = re.compile(
+    r'\[\[(gap|rules|pagebreak)(?::(\d+(?:\.\d+)?)(mm)?)?\]\]', re.I)
 # 只在「像指令」的片段里查：命令名后面不以 ] 收尾的都算写错
 DIRECTIVE_LOOK_RE = re.compile(r'\[\[\s*(gap|rules|pagebreak)\b[^\]]*\]\]', re.I)
 QUOTE_PREFIX_RE = re.compile(r'^>\s?')
@@ -117,7 +118,7 @@ def strip_container_prefix(line):
     """去掉引用块 / 列表记号，拿到容器里这一行的内容。
 
     指令在引用块和列表项里也生效（`> [[gap:2]]`、`- [[gap:2]]`），
-    所以判断「是否独占一行」要看剥掉容器记号之后剩下什么。
+    所以判断「是否单独成行」要看剥掉容器记号之后剩下什么。
     """
     s = line
     while True:
@@ -131,6 +132,26 @@ def strip_container_prefix(line):
             s = t[m.end():]
             continue
         return t
+
+
+def split_directive_line(content):
+    """整行只有指令（可并排多个，空白分隔）→ 返回 token 列表；否则 None。
+
+    判定与工具一致：指令扫出来之后，指令之间和行首行尾都只能有空白；
+    只要某个片段不是合法指令，或还夹着别的文字，整行就不生效。
+    """
+    toks, pos, n = [], 0, len(content)
+    while pos < n:
+        m = re.match(r'[ \t\u3000]*', content[pos:])
+        pos += m.end()
+        if pos >= n:
+            break
+        tm = DIRECTIVE_TOKEN_RE.match(content, pos)
+        if not tm:
+            return None
+        toks.append(tm)
+        pos = tm.end()
+    return toks or None
 
 
 def directive_problem(tok, kind):
@@ -156,7 +177,7 @@ def directive_problem(tok, kind):
 
 
 def check_directives(line, lineno, rep):
-    """检查内置排版指令：写法、单位、上限、是否独占一行。
+    """检查内置排版指令：写法、单位、上限、是否单独成行（一行可并排多个）。
 
     代码围栏里的内容由主循环跳过（文档里讲语法不误报）；
     行内代码里的 `[[...]]` 会被 mask_inline_code 屏蔽，也不会误报。
@@ -172,47 +193,90 @@ def check_directives(line, lineno, rep):
         return
     content = strip_container_prefix(plain)
 
-    m = DIRECTIVE_VALID_RE.match(content)
-    if m:
-        kind = m.group(1).lower()
-        token = m.group(0).strip()
-        if kind == 'pagebreak':
-            if m.group(2) is not None:
+    toks = split_directive_line(content)
+    if toks:
+        total_lines = total_mm = total_rules = 0.0
+        cap_reported = False
+        for tm in toks:
+            kind = tm.group(1).lower()
+            arg = tm.group(2)
+            has_mm = bool(tm.group(3))
+            token = tm.group(0)
+            if kind == 'pagebreak':
+                if arg is not None:
+                    rep.add('error', lineno,
+                            '%s 带了参数，会被当普通文字显示；只写 [[pagebreak]]' % token)
+                    cap_reported = True
+                continue
+            if arg is None:
                 rep.add('error', lineno,
-                        '%s 带了参数，会被当普通文字显示；只写 [[pagebreak]]' % token)
-            return
-        val = float(m.group(2))
-        has_mm = bool(m.group(3))
-        if val <= 0:
-            rep.add('error', lineno,
-                    '%s 的数量必须大于 0；0 会被当普通文字显示' % token)
-            return
-        if kind == 'rules':
+                        '%s 缺少数量，应写成 [[%s:数字]] 或 [[%s:数字mm]]'
+                        % (token, kind, kind))
+                cap_reported = True
+                continue
+            val = float(arg)
+            if val <= 0:
+                rep.add('error', lineno,
+                        '%s 的数量必须大于 0；0 会被当普通文字显示' % token)
+                cap_reported = True
+                continue
+            if kind == 'rules':
+                if has_mm:
+                    rep.add('error', lineno,
+                            '%s 只按行数算，没有毫米单位；改成 [[rules:3]] 这种写法' % token)
+                    cap_reported = True
+                else:
+                    total_rules += val
+                    if val > DIRECTIVE_MAX_LINES:
+                        rep.add('error', lineno,
+                                '%s 超过上限 %d 条，工具会截断到上限'
+                                % (token, DIRECTIVE_MAX_LINES))
+                        cap_reported = True
+                continue
             if has_mm:
+                total_mm += val
+                if val > DIRECTIVE_MAX_MM:
+                    rep.add('error', lineno,
+                            '%s 超过上限 %d mm，工具会截断到上限'
+                            % (token, DIRECTIVE_MAX_MM))
+                    cap_reported = True
+            else:
+                total_lines += val
+                if val > DIRECTIVE_MAX_LINES:
+                    rep.add('error', lineno,
+                            '%s 超过上限 %d 行，工具会截断到上限'
+                            % (token, DIRECTIVE_MAX_LINES))
+                    cap_reported = True
+        # 并排多个时工具按「一行合计」截断，合计超了也要报
+        if not cap_reported:
+            if total_lines > DIRECTIVE_MAX_LINES:
                 rep.add('error', lineno,
-                        '%s 只按行数算，没有毫米单位；改成 [[rules:3]] 这种写法' % token)
-            elif val > DIRECTIVE_MAX_LINES:
+                        '这一行留白合计 %.0f 行，超过上限 %d 行，工具会截断；拆成几行或减少数量'
+                        % (total_lines, DIRECTIVE_MAX_LINES))
+            elif total_mm > DIRECTIVE_MAX_MM:
                 rep.add('error', lineno,
-                        '%s 超过上限 %d 条，工具会截断到上限'
-                        % (token, DIRECTIVE_MAX_LINES))
-            return
-        limit, unit = (DIRECTIVE_MAX_MM, 'mm') if has_mm else (DIRECTIVE_MAX_LINES, '行')
-        if val > limit:
-            rep.add('error', lineno,
-                    '%s 超过上限 %d %s，工具会截断到上限' % (token, limit, unit))
+                        '这一行留白合计 %.1f mm，超过上限 %d mm，工具会截断'
+                        % (total_mm, DIRECTIVE_MAX_MM))
+            elif total_rules > DIRECTIVE_MAX_LINES:
+                rep.add('error', lineno,
+                        '这一行横线合计 %.0f 条，超过上限 %d 条，工具会截断'
+                        % (total_rules, DIRECTIVE_MAX_LINES))
         return
 
-    # 不是独立一行的合法写法：分「整行就是坏指令」和「指令混在正文里」两种情况
-    for am in DIRECTIVE_LOOK_RE.finditer(content):
+    # 整行不是合法指令：先看是不是「并排写法里混了一个写错的」，否则就是「指令夹在正文里」
+    looks = list(DIRECTIVE_LOOK_RE.finditer(content))
+    for am in looks:
         tok = am.group(0)
-        rest = (content[:am.start()] + content[am.end():]).strip()
-        if rest:
-            rep.add('hint', lineno,
-                    '排版指令必须独占一行（前后不能有其他文字），否则会原样显示成文字')
-            return
+        if DIRECTIVE_TOKEN_RE.fullmatch(tok):
+            continue
         kind = am.group(1).lower()
         rep.add('error', lineno,
                 '%s 会原样显示成文字：%s' % (tok, directive_problem(tok, kind)))
+        return
+    if looks:
+        rep.add('hint', lineno,
+                '排版指令必须单独成行：整行除了指令不能有别的文字'
+                '（一行可以并排写多个，用空格隔开），否则会原样显示成文字')
         return
 
 

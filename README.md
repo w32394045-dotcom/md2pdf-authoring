@@ -42,8 +42,9 @@ The Skill only covers *how to write*; these are the md2pdf features added this r
 already folded into `SKILL.md` wherever they affect a writing decision:
 
 - **Built-in layout directives (v3)**: `[[gap:3]]` — 3 blank lines; `[[gap:20mm]]` — 20 mm of space;
-  `[[rules:3]]` — 3 answer lines; `[[pagebreak]]` — forced page break. Must sit alone on their own line;
-  invalid forms show up as literal text; caps are 200 lines / rules and 500 mm.
+  `[[rules:3]]` — 3 answer lines; `[[pagebreak]]` — forced page break. Each must sit on its own line
+  (several may share one line, but no body text on that line); invalid forms show up as literal text;
+  caps are 200 lines / rules and 500 mm.
 - **Three footnote placements**: end of document / next to the reference (same page when printed) / both.
   Syntax is still a plain `[^1]`; the reader picks the placement in settings.
 - **Per-page decorations**: author card (avatar + text; top / bottom / every page top / every page bottom) and
@@ -52,8 +53,11 @@ already folded into `SKILL.md` wherever they affect a writing decision:
   content-surface opacity; avatar upload, crop and reuse. Print needs "Background graphics" ticked in the print dialog.
 - **Richer accent colour**: 7 presets + free colour wheel + `#RRGGBB` + "pick from image" + the 24 most recent colours.
 - **File history**: autosaved after ~2.6 s of inactivity, up to 50 entries, with time / word count / size (IndexedDB, local only).
-- **Image persistence**: local images picked together with the `.md` the first time are stored locally,
-  so reopening the same document no longer asks for them (an old bug).
+- **Base64 image embedding**: the toolbar’s “🖼 Image” button downsizes a picture to 1600 px on the long edge
+  and writes it into the Markdown as base64, so it survives sending the file or switching computers. Local paths
+  (`![](fig1.png)`) and external links are unreliable — don’t use them.
+- **Large documents fall back to IndexedDB**: once embedded images push the document past the localStorage quota,
+  the text is stored in the local database instead, so a reload doesn’t lose it.
 - **Settings export / import as JSON** (excludes background image, avatar, document images and the font library).
 - **Rewritten built-in samples in 7 languages**, covering directives, footnotes, backgrounds, avatars and per-page decorations — usable as templates.
 
@@ -216,8 +220,9 @@ What it checks:
 - Unicode maths approximations (`x²`, `√2`, `≤`) — they fall apart inside formulas
 - unbalanced `\ce{` / `\pu{` braces
 - document-level LaTeX that is not supported (`\usepackage`, `\begin{document}`, `\label`/`\ref`)
-- **layout directives**: standalone line, valid syntax / unit / count, and caps (200 lines or rules, 500 mm) —
-  a malformed directive is silently printed as text by the tool, so the linter reports it as an error
+- **layout directives**: own line (several may share one; caps count per line as a whole), valid syntax / unit / count,
+  and caps (200 lines or rules, 500 mm) — a malformed directive is silently printed as text by the tool,
+  so the linter reports it as an error
 - tables wider than 6 columns, code lines over 100 characters, skipped heading levels
 - the legacy `<div class="page-break"></div>` is **not** flagged (still supported, no forced migration)
 
