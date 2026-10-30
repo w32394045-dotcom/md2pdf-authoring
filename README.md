@@ -60,8 +60,10 @@ already folded into `SKILL.md` wherever they affect a writing decision:
 - **Images embedded as base64, with a converter**: `scripts/img2base64.py` turns local image files into
   Markdown with inline base64 (`--insert doc.md fig1.png` replaces `<!--img-->` placeholders), so the AI never
   has to copy megabytes of base64 into its context. Stdlib only; with Pillow installed, `--max-edge 1600`
-  downsizes first. The toolbar’s “🖼 Image” button in md2pdf (pick / paste / drop) does the same thing and is
-  fully compatible. Local paths (`![](fig1.png)`) and external links are unreliable — don’t use them.
+  downsizes first. The toolbar’s “🖼 Image” button in md2pdf does the same thing (pick / paste / drop) and is
+  fully compatible; its **Manage** tab lists the document’s images as thumbnail cards so they can be ticked and
+  deleted instead of selecting a huge base64 string by hand. Local paths (`![](fig1.png)`) and external links
+  are unreliable — don’t use them.
 - **Large documents fall back to IndexedDB**: once embedded images push the document past the localStorage quota,
   the text is stored in the local database instead, so a reload doesn’t lose it.
 - **Settings export / import as JSON** (excludes background image, avatar, document images and the font library).
