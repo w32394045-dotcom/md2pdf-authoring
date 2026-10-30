@@ -54,6 +54,9 @@ already folded into `SKILL.md` wherever they affect a writing decision:
   content-surface opacity; avatar upload, crop and reuse. Print needs "Background graphics" ticked in the print dialog.
 - **Richer accent colour**: 7 presets + free colour wheel + `#RRGGBB` + "pick from image" + the 24 most recent colours.
 - **File history**: autosaved after ~2.6 s of inactivity, up to 50 entries, with time / word count / size (IndexedDB, local only).
+- **Fill-in blanks**: a run of 2+ underscores (`Answer: ____`) is drawn as an even answer line whose
+  width follows the underscore count (min 2.4em, capped at 12). In Chinese text `__text__` becomes a blank
+  instead of bold — use `**text**` for bold; a line containing only `___` stays a divider.
 - **Images embedded as base64, with a converter**: `scripts/img2base64.py` turns local image files into
   Markdown with inline base64 (`--insert doc.md fig1.png` replaces `<!--img-->` placeholders), so the AI never
   has to copy megabytes of base64 into its context. Stdlib only; with Pillow installed, `--max-edge 1600`
@@ -238,6 +241,8 @@ What it checks:
 - **images**: local paths (`![](fig1.png)`) and external links → warnings (the browser cannot read them and
   offline printing is unreliable); `data:image/…;base64,…` → checks that the base64 decodes, that the file
   header matches the declared mime type, and hints when a single image is very large
+- **underscores**: `__text__` used as bold → hint (in Chinese text it renders as a fill-in blank; use `**text**`);
+  a line containing only `___` → hint (it becomes a divider; use `[[rules:N]]` for a full-width answer line)
 - the legacy `<div class="page-break"></div>` is **not** flagged (still supported, no forced migration)
 
 It does **not** fire on documentation: code fences and inline code are masked before checking, so a file that

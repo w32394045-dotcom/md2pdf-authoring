@@ -22,6 +22,10 @@
     外链（`![](https://…)`）→ warn：离线打印不可靠
     `data:image/…;base64,…` → 校验 base64 能解码、文件头与 mime 对得上；单张过大给 hint
 用 scripts/img2base64.py 把本地图片转成 base64 再写进 Markdown。
+
+下划线也在检查范围内（md2pdf 里它是填空，不是加粗）：
+    `__文字__` → hint：会被排成填空空线，加粗请用 `**文字**`
+    整行只有 `___` → hint：会被当成分隔线；整行答题线用 `[[rules:N]]`
 """
 
 import argparse
@@ -88,6 +92,9 @@ DATA_IMAGE_MAGIC = {
     'image/x-icon': (b'\x00\x00\x01\x00',),
     'image/vnd.microsoft.icon': (b'\x00\x00\x01\x00',),
 }
+CJK_RE = re.compile(r'[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]')
+UNDERSCORE_LINE_RE = re.compile(r'^_{3,}[ \t]*$')
+BOLD_CJK_RE = re.compile(r'__([^_\n]{1,60})__')
 
 
 def image_magic_ok(mime, head):
@@ -379,6 +386,32 @@ def check_directives(line, lineno, rep):
         return
 
 
+def check_underscores(line, lineno, rep):
+    """下划线在 md2pdf 里是「填空」：连续 2 个以上会排成等宽答题空线，不再表示加粗。
+
+    所以 `__文字__` 当加粗用会被排成两条空线；一整行只有 `___` 会被当成分隔线。
+    代码围栏由主循环跳过，行内代码里的示例被屏蔽，不误报。
+    """
+    if '_' not in line:
+        return
+    plain = mask_inline_code(line)
+    if '_' not in plain:
+        return
+    content = strip_container_prefix(plain)
+    if UNDERSCORE_LINE_RE.match(content):
+        rep.add('hint', lineno,
+                '整行只有下划线会被当成分隔线；填空请和下划线所在文字写在同一行'
+                '（如「答案：____」），整行答题线用 [[rules:N]]')
+        return
+    for m in BOLD_CJK_RE.finditer(content):
+        inner = m.group(1)
+        if CJK_RE.search(inner):
+            rep.add('hint', lineno,
+                    '`%s` 在中文里会排成填空空线（不是加粗）；加粗请写 **%s**'
+                    % (m.group(0), inner))
+            return
+
+
 def split_row(line):
     """按未转义、且不在行内代码里的 | 切单元格。"""
     cells, buf, i, in_code = [], '', 0, False
@@ -477,6 +510,9 @@ def scan(path):
 
         # 图片：本地路径 / 外链 / base64
         check_images(line, lineno, rep)
+
+        # 下划线：填空空线（不是加粗）
+        check_underscores(line, lineno, rep)
 
         # 表格
         if '|' in line and i + 1 < n and TABLE_SEP_RE.match(lines[i + 1]) and '-' in lines[i + 1]:
